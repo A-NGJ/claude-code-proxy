@@ -1,6 +1,7 @@
 package transform
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/A-NGJ/claude-code-proxy/internal/types"
@@ -8,9 +9,9 @@ import (
 
 func TestRequest_SimpleText(t *testing.T) {
 	req := types.AntrhopicRequest{
-		Model: "claude-3-opus",
+		Model:     "claude-3-opus",
 		MaxTokens: 1024,
-		System: "You are a helpful assistant.",
+		System:    "You are a helpful assistant.",
 		Messages: []types.AnthropicMessage{
 			{Role: "user", Content: "Hello"},
 		},
@@ -32,5 +33,57 @@ func TestRequest_SimpleText(t *testing.T) {
 
 	if result.Messages[1].Content != "Hello" {
 		t.Errorf("Expected user content 'Hello', got '%s'", result.Messages[1].Content)
+	}
+}
+
+func TestRequest_ToolUse(t *testing.T) {
+	toolInput := json.RawMessage(`{"path": "/tmp""}`)
+	req := types.AntrhopicRequest{
+		Model:     "claude-3-opus",
+		MaxTokens: 1024,
+		Messages: []types.AnthropicMessage{
+			{Role: "user", Content: "List files"},
+			{
+				Role: "assistant",
+				Content: []interface{}{
+					map[string]interface{}{
+						"type":  "tool_use",
+						"id":    "tool_1",
+						"name":  "ls",
+						"input": map[string]interface{}{"path": "/tmp"},
+					},
+				},
+			},
+			{
+				Role: "user",
+				Content: []interface{}{
+					map[string]interface{}{
+						"type":        "tool_result",
+						"tool_use_id": "tool_id",
+						"content":     "file1.txt\nfile2.txt",
+					},
+				},
+			},
+		},
+		Tools: []types.AnthropicTool{
+			{Name: "ls", Description: "List files in a directory", InputSchema: toolInput},
+		},
+	}
+
+	result := Request(req, "")
+
+	// Should have: user, assistant with tool_calls, tool result
+	if len(result.Messages) != 3 {
+		t.Fatalf("Expected 3 messages, got %d", len(result.Messages))
+	}
+
+	// Check tool calls on assistant message
+	if len(result.Messages[1].ToolCalls) != 1 {
+		t.Errorf("Expected 1 tool call, got %d", len(result.Messages[1].ToolCalls))
+	}
+
+	// Check tool result
+	if result.Messages[2].Role != "tool" {
+		t.Errorf("Expected tool role, got %s", result.Messages[2].Role)
 	}
 }
