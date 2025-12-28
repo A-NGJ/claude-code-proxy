@@ -5,7 +5,8 @@ import "encoding/json"
 type AntrhopicRequest struct {
 	Model         string             `json:"model"`
 	Messages      []AnthropicMessage `json:"messages"`
-	MaxTokens     int                `json:"max_tokens,omitempty"` // string or []SystemBlock
+	MaxTokens     int                `json:"max_tokens,omitempty"`
+	System        any                `json:"system,omitempty"` // string or []SystemBlock
 	Stream        bool               `json:"stream,omitempty"`
 	Tools         []AnthropicTool    `json:"tools,omitempty"`
 	ToolChoice    interface{}        `json:"tool_choice,omitempty"`
