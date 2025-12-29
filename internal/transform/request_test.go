@@ -45,19 +45,19 @@ func TestRequest_ToolUse(t *testing.T) {
 			{Role: "user", Content: "List files"},
 			{
 				Role: "assistant",
-				Content: []interface{}{
-					map[string]interface{}{
+				Content: []any{
+					map[string]any{
 						"type":  "tool_use",
 						"id":    "tool_1",
 						"name":  "ls",
-						"input": map[string]interface{}{"path": "/tmp"},
+						"input": map[string]any{"path": "/tmp"},
 					},
 				},
 			},
 			{
 				Role: "user",
-				Content: []interface{}{
-					map[string]interface{}{
+				Content: []any{
+					map[string]any{
 						"type":        "tool_result",
 						"tool_use_id": "tool_id",
 						"content":     "file1.txt\nfile2.txt",
@@ -85,5 +85,24 @@ func TestRequest_ToolUse(t *testing.T) {
 	// Check tool result
 	if result.Messages[2].Role != "tool" {
 		t.Errorf("Expected tool role, got %s", result.Messages[2].Role)
+	}
+}
+
+func TestConvertToolChoice(t *testing.T) {
+	tests := []struct {
+		input    any
+		expected any
+	}{
+		{"auto", "auto"},
+		{"any", "required"},
+		{"none", "none"},
+		{nil, nil},
+	}
+
+	for _, tt := range tests {
+		result := convertToolChoice(tt.input)
+		if result != tt.expected {
+			t.Errorf("convertToolChoice(%v) = %v; want %v", tt.input, result, tt.expected)
+		}
 	}
 }

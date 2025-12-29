@@ -1,9 +1,13 @@
 package proxy
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 
+	"github.com/A-NGJ/claude-code-proxy/internal/transform"
 	"github.com/A-NGJ/claude-code-proxy/internal/types"
 )
 
@@ -20,13 +24,13 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Transform request
-	// openaiReq := transform.Request(req, s.config.Model)
-	//
-	// if req.Stream {
-	// 	s.handleStreamingRequest(w, openaiReq)
-	// } else {
-	// 	s.handleNonStreamingRequest(w, openaiReq)
-	// }
+	openaiReq := transform.Request(req, s.config.Model)
+
+	if req.Stream {
+		s.handleStreamingRequest(w, openaiReq)
+	} else {
+		s.handleNonStreamingRequest(w, openaiReq)
+	}
 }
 
 func (s *Server) handleCountTokens(w http.ResponseWriter, r *http.Request) {
@@ -38,8 +42,36 @@ func (s *Server) handleCountTokens(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleNonStreamingRequest(w http.ResponseWriter, req types.OpenAIRequest) {
-	// TODO : Implement in pahse 4
-	http.Error(w, "Not implemented", http.StatusNotImplemented)
+	reqBody, err := json.Marshal(req)
+	if err != nil {
+		http.Error(w, "Failed to marshal request", http.StatusInternalServerError)
+		return
+	}
+
+	ollamaURL := s.config.OllamaURL + "/v1/chat/completions"
+	resp, err := s.client.Post(ollamaURL, "application/json", bytes.NewReader(reqBody))
+	if err != nil {
+		http.Error(w, "Failed to reach Ollama: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		http.Error(w, fmt.Sprintf("Ollama error: %s", body), resp.StatusCode)
+		return
+	}
+
+	var openaiResp types.OpenAIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&openaiResp); err != nil {
+		http.Error(w, "Failed to decode Ollama response", http.StatusInternalServerError)
+		return
+	}
+
+	anthropicResp := transform.Response(openaiResp, req.Model)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(anthropicResp)
 }
 
 func (s *Server) handleStreamingRequest(w http.ResponseWriter, req types.OpenAIRequest) {
